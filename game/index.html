@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny Rampage</title>
+<meta name="description" content="All of Zone 1 as a playable map you destroy. Built on tiny.london.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tiny Rampage">
+<meta property="og:description" content="All of Zone 1 as a playable map you destroy. Built on tiny.london.">
+<meta property="og:url" content="https://tiny-rampage.pages.dev/">
+<meta property="og:image" content="https://tiny-rampage.pages.dev/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://tiny-rampage.pages.dev/og.jpg">
+<link rel="preconnect" href="https://tiles.tiny.london" crossorigin>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Silkscreen&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --haze: #ccd6e3;
+    --ink: #10131a;
+    --panel: rgba(16, 19, 26, 0.86);
+    --paper: #f4f1e8;
+    --lizard: #6cc23a;
+    --warn: #ff5a3c;
+    --fence: #7df9ff;
+    --pixel: "Silkscreen", "Courier New", monospace;
+  }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--haze); }
+  canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+  .hud {
+    position: fixed; top: 12px; left: 12px; display: flex; gap: 20px; align-items: flex-start;
+    padding: 8px 12px; background: var(--panel); color: var(--paper);
+    font: 14px/1.2 var(--pixel); letter-spacing: 0.04em; font-variant-numeric: tabular-nums;
+  }
+  .hud b { display: block; font-size: 22px; font-weight: 400; color: var(--lizard); }
+  .hud b.low { color: var(--warn); }
+  .bar { width: 120px; height: 14px; margin-top: 6px; background: #3a1714; border: 2px solid var(--paper); }
+  .bar i { display: block; height: 100%; background: var(--lizard); }
+  .bar i.low { background: var(--warn); }
+  .feed {
+    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    color: var(--paper); font: 18px var(--pixel); text-align: center;
+    text-shadow: 2px 2px 0 var(--ink), -1px -1px 0 var(--ink); pointer-events: none;
+    width: calc(100vw - 32px);
+  }
+  .feed.warn { color: var(--warn); }
+  .feed.zap { color: var(--fence); font-size: 22px; }
+  .overlay {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: rgba(16, 19, 26, 0.55); color: var(--paper); font-family: var(--pixel); text-align: center;
+  }
+  .card { background: var(--ink); padding: 28px 36px; max-width: 30rem; border: 4px solid var(--lizard); }
+  .card h1 { margin: 0 0 14px; font-size: 44px; font-weight: 400; color: var(--lizard); line-height: 1; }
+  .card h1.bad { color: var(--warn); }
+  .card p { margin: 8px 0; font-size: 15px; line-height: 1.5; }
+  .card .big { font-size: 30px; color: var(--paper); }
+  .card .go { margin-top: 18px; color: var(--warn); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .card .go { animation: none; } }
+  .info-btn {
+    position: fixed; top: 12px; right: 12px; padding: 8px 12px; border: 0; cursor: pointer;
+    background: var(--panel); color: var(--paper); font: 14px var(--pixel); letter-spacing: 0.04em;
+  }
+  .info-btn:hover, .info-btn:focus-visible { color: var(--lizard); outline: 2px solid var(--lizard); }
+  .info { z-index: 5; }
+  .info .card { text-align: left; max-width: 34rem; max-height: calc(100vh - 48px); overflow-y: auto; }
+  .info h1 { font-size: 30px; }
+  .info h2 { margin: 18px 0 6px; font-size: 16px; font-weight: 400; color: var(--lizard); }
+  .info p { font-size: 13px; }
+  .info a { color: var(--fence); }
+  .info .links { display: flex; gap: 16px; margin-top: 18px; font-size: 15px; }
+  .info .close { float: right; margin: -8px -12px 0 0; background: none; border: 0; color: var(--paper); font: 14px var(--pixel); cursor: pointer; }
+  .info .close:hover, .info .close:focus-visible { color: var(--warn); }
+  .credit {
+    position: fixed; right: 8px; bottom: 6px; font: 10px var(--pixel); color: var(--ink); opacity: 0.7;
+  }
+  .credit a { color: inherit; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud">
+  <div>TIME<b id="hT">60.0</b></div>
+  <div>DAMAGE<b id="hD">£0</b></div>
+  <div>HEALTH<div class="bar"><i id="hH" style="width:100%"></i></div></div>
+</div>
+<button class="info-btn" id="infoBtn" type="button">INFO</button>
+<div class="feed" id="feed"></div>
+<div class="overlay info" id="info" hidden>
+  <div class="card">
+    <button class="close" id="infoClose" type="button">CLOSE</button>
+    <h1>TINY RAMPAGE</h1>
+    <h2>Why</h2>
+    <p>I built this because I'm an idiot.</p>
+    <h2>How it works</h2>
+    <p>The map is <a href="https://tiny.london/" target="_blank" rel="noopener">tiny.london</a>: all of Greater London as one isometric pixel-art map. The game loads its tiles live.</p>
+    <p>The buildings are <span id="nB">20,000</span> OpenStreetMap outlines with heights. tiny.london publishes its camera maths, so each outline sits on its building in the art to the pixel.</p>
+    <p>When a building falls, the game cuts that building's real pixels off the screen and sinks them into the ground.</p>
+    <p>Police cars drive the real road network. Helicopters go where they like.</p>
+    <p>The electric fence is the real TfL Zone 1 boundary. Damage is floor area at £4,000 a square metre.</p>
+    <p>One HTML file, a canvas, no libraries. Hosted on Cloudflare. Built with Claude Code in an afternoon.</p>
+    <div class="links">
+      <a href="https://github.com/b1rdmania/tiny-rampage" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://x.com/b1rdmania" target="_blank" rel="noopener">X @b1rdmania</a>
+    </div>
+  </div>
+</div>
+<div class="overlay" id="ov">
+  <div class="card" id="card">
+    <h1>TINY RAMPAGE</h1>
+    <p>60 seconds. Zone 1.</p>
+    <p>Arrow keys to stomp. Space to punch.</p>
+    <p>Don't get shot.</p>
+    <p class="go" id="go">LOADING LONDON&hellip;</p>
+  </div>
+</div>
+<div class="credit">Map art: <a href="https://tiny.london/" target="_blank" rel="noopener">tiny.london</a> · Buildings © OpenStreetMap contributors · Zones: TfL Open Data</div>
+<script>
+"use strict";
+// ---- map constants (from tiny.london/map.json) ----
+const TILES = "https://tiles.tiny.london/v6/tiles_files";
+const TOP = 9, TS = 512;
+const UP = Math.SQRT1_2 / 0.29296875;           // screen px per metre of height at full res
+const STARTS = [
+  ["SOHO", 103899, 54315], ["COVENT GARDEN", 105398, 55600], ["THE CITY", 113566, 56703],
+  ["FLEET STREET", 109067, 55628], ["LEICESTER SQUARE", 103864, 55699], ["HOLBORN", 106874, 54296]
+];
+const ROUND = 60, HELI_AT = 30, CELL = 128, MON_H = 30, RCELL = 256;
+
+const cv = document.getElementById("c"), cx = cv.getContext("2d");
+const $ = id => document.getElementById(id);
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = innerWidth; H = innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+}
+addEventListener("resize", resize); resize();
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function money(v) {
+  if (v >= 1e9) return "£" + (v / 1e9).toFixed(2) + "BN";
+  if (v >= 1e6) return "£" + (v / 1e6).toFixed(1) + "M";
+  return "£" + Math.round(v / 1e3) + "K";
+}
+
+// ---- buildings, zone fence, spatial grid ----
+let ALL = [], ZONE = [], grid = new Map();
+function gkey(i, j) { return i * 100000 + j; }
+function inPoly(p, x, y) {
+  let c = false;
+  for (let i = 0, j = p.length - 2; i < p.length; j = i, i += 2) {
+    const xi = p[i], yi = p[i + 1], xj = p[j], yj = p[j + 1];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+const inZone = (x, y) => inPoly(ZONE, x, y);
+function load(data) {
+  ZONE = data.zone;
+  for (const [h, a, name, pts] of data.b) {
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, sx = 0, sy = 0;
+    for (let i = 0; i < pts.length; i += 2) {
+      const x = pts[i], y = pts[i + 1];
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      sx += x; sy += y;
+    }
+    const n = pts.length / 2;
+    const b = { h, a, name, pts, x0, y0, x1, y1, cx: sx / n, cy: sy / n, eaten: false, hp: 0, holes: null, seen: 0,
+      value: a * Math.max(1, Math.round(h / 3.5)) * 4000 };
+    ALL.push(b);
+    for (let i = Math.floor(x0 / CELL); i <= Math.floor(x1 / CELL); i++)
+      for (let j = Math.floor(y0 / CELL); j <= Math.floor(y1 / CELL); j++) {
+        const k = gkey(i, j); let l = grid.get(k); if (!l) grid.set(k, l = []); l.push(b);
+      }
+  }
+}
+let stamp = 0;
+function near(x0, y0, x1, y1, fn) {
+  stamp++;
+  for (let i = Math.floor(x0 / CELL); i <= Math.floor(x1 / CELL); i++)
+    for (let j = Math.floor(y0 / CELL); j <= Math.floor(y1 / CELL); j++) {
+      const l = grid.get(gkey(i, j)); if (!l) continue;
+      for (const b of l) if (b.seen !== stamp) { b.seen = stamp; fn(b); }
+    }
+}
+// the standing building at a point, if any
+function hitAt(x, y) {
+  let hit = null;
+  near(x, y, x, y, b => {
+    if (!hit && !b.eaten && x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1 && inPoly(b.pts, x, y)) hit = b;
+  });
+  return hit;
+}
+const free = (x, y) => inZone(x, y) && !hitAt(x, y);
+// the standing building closest to a point, within maxd
+function nearestBuilding(x, y, maxd) {
+  let best = null, bd = maxd;
+  near(x - maxd, y - maxd, x + maxd, y + maxd, b => {
+    if (b.eaten || x < b.x0 - bd || x > b.x1 + bd || y < b.y0 - bd || y > b.y1 + bd) return;
+    let d = inPoly(b.pts, x, y) ? 0 : Infinity;
+    if (d) for (let i = 0, p = b.pts, j = p.length - 2; i < p.length; j = i, i += 2) {
+      const ax = p[j], ay = p[j + 1], ex = p[i] - ax, ey = p[i + 1] - ay, L = ex * ex + ey * ey || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L));
+      d = Math.min(d, Math.hypot(x - ax - t * ex, y - ay - t * ey));
+    }
+    if (d < bd) { bd = d; best = b; }
+  });
+  return best;
+}
+
+// ---- road graph: police cars drive the real streets ----
+let RN = null, RS = null, RA = null, RCOUNT = 0;
+const rgrid = new Map();
+let dist = null, touched = [];
+function loadRoads(d) {
+  RN = d.n; RCOUNT = RN.length / 2;
+  const deg = new Uint32Array(RCOUNT + 1), e = d.e;
+  for (let i = 0; i < e.length; i++) deg[e[i] + 1]++;
+  for (let i = 0; i < RCOUNT; i++) deg[i + 1] += deg[i];
+  RS = deg.slice(); RA = new Uint32Array(e.length);
+  const fill = deg.slice();
+  for (let i = 0; i < e.length; i += 2) { RA[fill[e[i]]++] = e[i + 1]; RA[fill[e[i + 1]]++] = e[i]; }
+  for (let i = 0; i < RCOUNT; i++) {
+    const k = gkey(Math.floor(RN[i * 2] / RCELL), Math.floor(RN[i * 2 + 1] / RCELL));
+    let l = rgrid.get(k); if (!l) rgrid.set(k, l = []); l.push(i);
+  }
+  dist = new Float64Array(RCOUNT).fill(Infinity);
+}
+function nearestNode(x, y) {
+  const ci = Math.floor(x / RCELL), cj = Math.floor(y / RCELL);
+  let best = -1, bd = Infinity;
+  for (let r = 0; r < 6 && best < 0; r++)
+    for (let i = ci - r; i <= ci + r; i++)
+      for (let j = cj - r; j <= cj + r; j++) {
+        const l = rgrid.get(gkey(i, j)); if (!l) continue;
+        for (const n of l) { const d = Math.hypot(RN[n * 2] - x, RN[n * 2 + 1] - y); if (d < bd) { bd = d; best = n; } }
+      }
+  return best;
+}
+// road distance from every nearby junction to the monster, so each car can head downhill
+function roadField() {
+  for (const n of touched) dist[n] = Infinity;
+  touched = [];
+  const src = nearestNode(mon.x, mon.y); if (src < 0) return;
+  const hn = [src], hd = [0]; dist[src] = 0; touched.push(src);
+  const push = (n, d) => { hn.push(n); hd.push(d); let i = hn.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (hd[p] <= hd[i]) break; [hn[p], hn[i]] = [hn[i], hn[p]]; [hd[p], hd[i]] = [hd[i], hd[p]]; i = p; } };
+  const popMin = () => { const n = hn[0], d = hd[0], ln = hn.pop(), ld = hd.pop();
+    if (hn.length) { hn[0] = ln; hd[0] = ld; let i = 0;
+      for (;;) { const l = i * 2 + 1, r = l + 1; let m = i;
+        if (l < hn.length && hd[l] < hd[m]) m = l; if (r < hn.length && hd[r] < hd[m]) m = r;
+        if (m === i) break; [hn[m], hn[i]] = [hn[i], hn[m]]; [hd[m], hd[i]] = [hd[i], hd[m]]; i = m; } }
+    return [n, d]; };
+  while (hn.length) {
+    const [n, d] = popMin();
+    if (d > dist[n] || d > 4000) continue;
+    for (let k = RS[n]; k < RS[n + 1]; k++) {
+      const v = RA[k], nd = d + Math.hypot(RN[v * 2] - RN[n * 2], RN[v * 2 + 1] - RN[n * 2 + 1]);
+      if (nd < dist[v]) { if (dist[v] === Infinity) touched.push(v); dist[v] = nd; push(v, nd); }
+    }
+  }
+}
+
+// ---- tiles ----
+const tiles = new Map();
+function tile(l, i, j) {
+  const k = l + "/" + i + "_" + j;
+  let t = tiles.get(k);
+  if (!t) {
+    t = new Image(); t.src = TILES + "/" + k + ".webp"; tiles.set(k, t);
+    if (tiles.size > 700) tiles.delete(tiles.keys().next().value);
+  }
+  return t.complete && t.naturalWidth ? t : null;
+}
+
+// ---- sprites ----
+// pixel lizard, 32x36 grid, facing right; frames: 0/1 walk, 2 chomp, 3 punch
+const SPR = [0, 1, 2, 3].map(f => {
+  const c = document.createElement("canvas"); c.width = 32; c.height = 36;
+  const g = c.getContext("2d");
+  const r = (col, x, y, w, h) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const G = "#6cc23a", D = "#2f6b1c", L = "#d3e27a", Wt = "#fffbe8", K = "#10131a", R = "#c8323a";
+  const jaw = f === 2 ? 4 : f === 3 ? 2 : 0, lift = f === 1 ? 2 : 0, lean = f === 3 ? 1 : 0;
+  r(D, 0, 30, 7, 3); r(G, 2, 26, 9, 5);                       // tail
+  r(D, 8, 32 - lift, 6, 4 + lift); r(D, 16, 32 - (2 - lift), 6, 4 + (2 - lift)); // legs
+  r(K, 7, 35, 8, 1); r(K, 15, 35, 8, 1);
+  r(G, 8 + lean, 14, 15, 19); r(L, 16 + lean, 17, 7, 14);     // body + belly
+  for (let k = 0; k < 4; k++) r(D, 5 + k + lean, 12 + k * 4, 3, 3); // back spikes
+  r(G, 14 + lean, 2, 17, 10); r(D, 14 + lean, 2, 17, 2);      // head
+  r(Wt, 24 + lean, 4, 4, 4); r(K, 26 + lean, 5, 2, 3);        // eye
+  if (f === 3) r(D, 23 + lean, 3, 5, 1);                      // angry brow
+  if (jaw) r(R, 19 + lean, 12, 12 - lean, jaw);               // open mouth
+  r(G, 18 + lean, 12 + jaw, 13 - lean, 4);                    // jaw
+  for (let k = 0; k < 4; k++) { r(Wt, 21 + k * 3 + lean, 11, 1, 2); if (22 + k * 3 + lean < 32) r(Wt, 22 + k * 3 + lean, 12 + jaw, 1, 2); }
+  if (f === 3) { r(G, 22, 16, 7, 3); r(D, 28, 14, 4, 6); }    // fist thrown forward
+  else { r(G, 22, 17, 7, 3); r(Wt, 29, 17, 1, 1); r(Wt, 29, 19, 1, 1); } // arm + claws
+  return c;
+});
+// armed response car, 20x11, facing right, Battenburg livery
+const CAR = (() => {
+  const c = document.createElement("canvas"); c.width = 20; c.height = 11;
+  const g = c.getContext("2d"), r = (col, x, y, w, h) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  r("#f4f4f0", 1, 3, 18, 6); r("#f4f4f0", 5, 1, 9, 3);
+  r("#24303d", 6, 2, 3, 2); r("#24303d", 10, 2, 3, 2);
+  for (let k = 0; k < 9; k++) r(k % 2 ? "#1b4fbf" : "#f5d10a", 1 + k * 2, 6, 2, 2);
+  r("#10131a", 3, 8, 3, 3); r("#10131a", 14, 8, 3, 3);
+  r("#ffb000", 18, 4, 1, 1); r("#c8323a", 1, 4, 1, 1);
+  return c;
+})();
+
+// police helicopter, 26x12, facing right
+const HELI = (() => {
+  const c = document.createElement("canvas"); c.width = 26; c.height = 12;
+  const g = c.getContext("2d"), r = (col, x, y, w, h) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  r("#1d2633", 0, 4, 12, 2); r("#1d2633", 0, 2, 2, 3);        // tail boom + fin
+  r("#1d2633", 10, 2, 13, 7); r("#1d2633", 12, 1, 9, 1);      // body
+  r("#8fd3ff", 19, 3, 4, 3);                                  // cockpit glass
+  for (let k = 0; k < 6; k++) r(k % 2 ? "#1b4fbf" : "#f5d10a", 10 + k * 2, 6, 2, 2);
+  r("#10131a", 11, 10, 12, 1); r("#10131a", 13, 9, 1, 1); r("#10131a", 20, 9, 1, 1); // skids
+  r("#10131a", 15, 0, 2, 1);                                  // rotor hub
+  return c;
+})();
+
+// ---- game state ----
+const mon = { x: 0, y: 0, hm: MON_H, face: 1, dx: 1, dy: 0, walk: 0, chomp: 0, punch: 0, cool: 0, hurt: 0, zap: 0, hp: 100 };
+const cam = { x: 103899, y: 54315, s: 2 };
+const parts = [], pops = [], falls = [], cops = [], bullets = [], helis = [];
+let mode = "loading", clock = ROUND, damage = 0, wrecked = 0, flipped = 0, downed = 0, spawnT = 0, heliT = 0, fieldT = 0, overT = 0, endWhy = "";
+let shake = 0, feedT = 0, now = 0;
+
+function reset() {
+  for (const b of ALL) { b.eaten = false; b.hp = 0; b.holes = null; }
+  parts.length = pops.length = falls.length = cops.length = bullets.length = helis.length = 0;
+  const [where, sx, sy] = pick(STARTS);
+  let x = sx, y = sy;
+  for (let r = 0; r < 400 && !free(x, y); r += 6) { const a = r * 0.7; x = sx + Math.cos(a) * r; y = sy + Math.sin(a) * r; }
+  Object.assign(mon, { x, y, face: 1, dx: 1, dy: 0, chomp: 0, punch: 0, cool: 0, hurt: 0, zap: 0, hp: 100 });
+  cam.x = x; cam.y = y;
+  clock = ROUND; damage = 0; wrecked = 0; flipped = 0; downed = 0; spawnT = 4; heliT = 0; fieldT = 0;
+  feed(where, "");
+}
+function best() { try { return +localStorage.getItem("tr-best") || 0; } catch (e) { return 0; } }
+function saveBest(v) { try { localStorage.setItem("tr-best", String(v)); } catch (e) {} }
+
+function start() {
+  reset(); mode = "play"; $("ov").hidden = true;
+  if (!ac) audio();
+}
+function gameOver(why) {
+  mode = "over"; endWhy = why; overT = 0;
+  const prev = best(), isBest = damage > prev;
+  if (isBest) saveBest(damage);
+  $("card").innerHTML =
+    (why === "shot" ? '<h1 class="bad">SHOT DOWN</h1>' : "<h1>TIME'S UP</h1>") +
+    '<p class="big">' + money(damage) + " of damage</p>" +
+    "<p>" + wrecked + " buildings · " + flipped + " police cars" + (downed ? " · " + downed + " helicopters" : "") + "</p>" +
+    "<p>" + (isBest ? "NEW BEST" : "Best " + money(prev)) + "</p>" +
+    '<p class="go">Space to go again</p>';
+  setTimeout(() => { if (mode === "over") $("ov").hidden = false; }, why === "shot" ? 1200 : 400);
+}
+
+// ---- info panel (pauses a round) ----
+let paused = false;
+function showInfo(on) {
+  $("info").hidden = !on; paused = on && mode === "play";
+  for (const k in keys) keys[k] = false;
+  if (on) $("infoClose").focus(); else $("infoBtn").blur();
+}
+$("infoBtn").addEventListener("click", () => showInfo(true));
+$("infoClose").addEventListener("click", () => showInfo(false));
+$("info").addEventListener("click", e => { if (e.target === $("info")) showInfo(false); });
+
+// ---- input ----
+const keys = {};
+addEventListener("keydown", e => {
+  if (!$("info").hidden) { if (e.key === "Escape" || e.key === " ") { e.preventDefault(); showInfo(false); } return; }
+  if (!e.key.startsWith("Arrow") && e.key !== " ") return;
+  e.preventDefault(); keys[e.key] = true;
+  if (e.key === " " && !e.repeat && (mode === "title" || (mode === "over" && overT > 1))) start();
+});
+addEventListener("keyup", e => { keys[e.key] = false; });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+// ---- sound ----
+let ac = null;
+function audio() { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
+function noise(len, freq, vol, type) {
+  if (!ac) return;
+  const n = Math.floor(ac.sampleRate * len), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+  const src = ac.createBufferSource(); src.buffer = buf;
+  const f = ac.createBiquadFilter(); f.type = type || "lowpass"; f.frequency.value = freq;
+  const v = ac.createGain(); v.gain.value = vol;
+  src.connect(f).connect(v).connect(ac.destination); src.start();
+}
+function tone(type, pts, vol, len) {
+  if (!ac) return;
+  const o = ac.createOscillator(), v = ac.createGain(), t = ac.currentTime;
+  o.type = type; o.frequency.setValueAtTime(pts[0], t);
+  pts.forEach((f, i) => o.frequency.linearRampToValueAtTime(f, t + (i + 1) * len / pts.length));
+  v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(vol, t + 0.03); v.gain.exponentialRampToValueAtTime(0.0001, t + len);
+  o.connect(v).connect(ac.destination); o.start(t); o.stop(t + len + 0.05);
+}
+const burpSound = () => tone("sawtooth", [110, 70, 95, 70, 95, 70, 90, 65], 0.25, 0.55);
+const siren = () => tone("square", [720, 960, 720, 960], 0.04, 0.9);
+
+// ---- effects ----
+function feed(msg, kind) {
+  const el = $("feed"); el.textContent = msg; el.className = "feed" + (kind ? " " + kind : ""); feedT = kind === "warn" ? 0.9 : 2.4;
+}
+function pop(text, x, y, z, size, col) { pops.push({ text, x, y, z, size, col, t: 0, life: 0.9, rot: rnd(-0.25, 0.25) }); }
+function dust(x, y, z, sz, n) {
+  for (let i = 0; i < n; i++) parts.push({ x: x + rnd(-sz, sz), y, z: z + rnd(0, sz * 0.5), vx: rnd(-40, 40), vz: rnd(10, 50), life: rnd(0.7, 1.4), t: 0, dust: true, sz: sz * rnd(0.6, 1.2), col: pick(["#e7dccb", "#d6cbb8", "#f1ebe0"]) });
+}
+function bits(x, y, z, sz, n, cols, spread) {
+  for (let i = 0; i < n; i++) parts.push({ x, y, z, vx: rnd(-1, 1) * (spread || 120) + mon.face * 60, vz: rnd(60, 200), life: rnd(0.5, 0.9), t: 0, dust: false, sz: sz * rnd(0.5, 1), col: pick(cols) });
+}
+const BRICK = ["#8a5a44", "#b7aea0", "#6b6f78", "#4b3b33"], SPARK = ["#7df9ff", "#ffffff", "#c8f7ff"], FIRE = ["#ffb000", "#ff5a3c", "#fff1a8", "#3a3a3a"];
+
+// ---- punching ----
+function hpFor(b) { return Math.max(1, Math.min(15, Math.round(Math.sqrt(b.a * b.h) / 60))); }
+function punch(b) {
+  if (!b.hp) { b.hp = hpFor(b); b.holes = []; }
+  b.hp--;
+  const fistZ = Math.min(b.h, mon.hm * 0.55) * UP;
+  const hx = Math.max(b.x0, Math.min(b.x1, mon.x + mon.face * mon.hm * 0.9));
+  const r = Math.max(6, Math.min(16, Math.min(b.x1 - b.x0, b.h * UP) * rnd(0.25, 0.4)));
+  b.holes.push({ x: hx + rnd(-r, r) * 0.5, y: b.cy, z: Math.max(r, fistZ + rnd(-r, r)), r });
+  bits(hx, b.cy, fistZ, Math.max(2, r * 0.25), 6, BRICK);
+  pop(pick(["POW", "WHAM", "BAM", "THUD", "SMASH", "WALLOP"]), hx, b.cy, fistZ + r, 1, "#fffbe8");
+  shake = Math.max(shake, 4);
+  noise(0.09, 500, 0.35);
+  if (b.hp <= 0) collapse(b);
+}
+function collapse(b) {
+  b.eaten = true; wrecked++; damage += b.value;
+  const big = Math.min(1, Math.sqrt(b.a * b.h) / 3000);
+  falls.push({ b, t: 0, dur: 0.55 + Math.min(1, b.h / 180), snap: null, big });
+  noise(0.4 + big * 0.8, 900 - big * 600, 0.3 + big * 0.25);
+  feed((b.name ? b.name.toUpperCase() + " · " : "") + money(b.value), "");
+  const joke = /St Mary Axe/i.test(b.name) ? "PICKLED" : null;
+  setTimeout(() => {
+    mon.chomp = 0.35;
+    if (joke || b.h >= 45) { pop(joke || "BURP!", mon.x + mon.face * mon.hm * 0.7, mon.y, mon.hm * UP * 0.95, 1.4, "#6cc23a"); burpSound(); }
+  }, 300 + Math.min(1000, b.h * 5));
+}
+function downHeli(h) {
+  h.dead = true; h.vz = 60; h.t = 0; downed++; damage += 6000000;
+  bits(h.x, h.y, h.z, 3, 12, FIRE, 140);
+  pop("SWAT", h.x, h.y, h.z + 20, 1.2, "#fffbe8");
+  shake = Math.max(shake, 8); noise(0.3, 900, 0.4);
+  feed("POLICE HELICOPTER · " + money(6000000));
+}
+function flipCop(c) {
+  c.dead = true; c.vz = 260; c.z = 0; c.spin = 0; c.t = 0;
+  flipped++; damage += 85000;
+  bits(c.x, c.y, 8, 4, 18, FIRE, 160);
+  dust(c.x, c.y, 0, 7, 4);
+  pop("KABOOM", c.x, c.y, 30, 1.3, "#ffb000");
+  shake = Math.max(shake, 10);
+  noise(0.6, 700, 0.45);
+}
+
+// ---- police ----
+function spawnCop() {
+  const R = Math.hypot(W, H) / 2 / cam.s + 30, opts = [];
+  for (const n of touched) if (dist[n] > R && dist[n] < R + 700 && inZone(RN[n * 2], RN[n * 2 + 1])) opts.push(n);
+  if (!opts.length) return;
+  const n = pick(opts);
+  cops.push({ at: n, to: n, p: 1, x: RN[n * 2], y: RN[n * 2 + 1], face: 1, cool: rnd(0.6, 1.2), flash: 0, dead: false, z: 0, vz: 0, spin: 0, t: 0 });
+  siren();
+}
+function spawnHeli() {
+  const a = rnd(0, Math.PI * 2), R = Math.hypot(W, H) / 2 / cam.s + 60;
+  helis.push({ x: mon.x + Math.cos(a) * R, y: mon.y + Math.sin(a) * R * 0.7, z: 26 * UP, ph: rnd(0, 6), face: 1, cool: rnd(1, 1.6), flash: 0, dead: false, vz: 0, spin: 0, t: 0 });
+  tone("sawtooth", [60, 64, 60, 64, 60, 64], 0.05, 1.2);
+}
+function shoot(fromX, fromY, face) {
+  const aimX = mon.x + rnd(-8, 8), aimY = mon.y - mon.hm * UP * rnd(0.3, 0.8);
+  const a = Math.atan2(aimY - fromY, aimX - fromX);
+  bullets.push({ x: fromX + face * 8, y: fromY, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, t: 0 });
+  noise(0.05, 2500, 0.12, "highpass");
+}
+function updateCops(dt) {
+  for (let i = cops.length - 1; i >= 0; i--) {
+    const c = cops[i]; c.t += dt; c.flash = Math.max(0, c.flash - dt);
+    if (c.dead) {
+      c.z += c.vz * dt; c.vz -= 700 * dt; c.spin += dt * 14;
+      if (c.z < 0) { c.z = 0; c.vz = 0; c.spin = Math.PI; }
+      if (c.t > 6) cops.splice(i, 1);
+      continue;
+    }
+    const d = Math.hypot(mon.x - c.x, mon.y - c.y);
+    c.face = mon.x > c.x ? 1 : -1;
+    if (d < 170 && c.p >= 1) {
+      if (mode === "play") { c.cool -= dt; if (c.cool <= 0) { c.cool = rnd(0.8, 1.4); c.flash = 0.07; shoot(c.x, c.y - 6, c.face); } }
+      continue;
+    }
+    if (c.p >= 1) {
+      // at a junction: take the road that gets closest to the monster
+      let next = -1, bd = dist[c.to];
+      for (let k = RS[c.to]; k < RS[c.to + 1]; k++) { const v = RA[k]; if (dist[v] < bd) { bd = dist[v]; next = v; } }
+      if (next < 0 && dist[c.to] === Infinity) { const k = RS[c.to] + Math.floor(Math.random() * (RS[c.to + 1] - RS[c.to])); if (k < RS[c.to + 1]) next = RA[k]; }
+      if (next < 0) continue;
+      c.at = c.to; c.to = next; c.p = 0;
+    }
+    const ax = RN[c.at * 2], ay = RN[c.at * 2 + 1], bx = RN[c.to * 2], by = RN[c.to * 2 + 1];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    c.p = Math.min(1, c.p + 130 * dt / len);
+    c.x = ax + (bx - ax) * c.p; c.y = ay + (by - ay) * c.p;
+    if (bx !== ax) c.face = bx > ax ? 1 : -1;
+  }
+  for (let i = helis.length - 1; i >= 0; i--) {
+    const h = helis[i]; h.t += dt; h.flash = Math.max(0, h.flash - dt);
+    if (h.dead) {
+      h.z = Math.max(0, h.z + h.vz * dt); h.vz -= 500 * dt; h.spin += dt * 9;
+      if (h.z === 0 && !h.boom) { h.boom = true; bits(h.x, h.y, 6, 5, 24, FIRE, 180); dust(h.x, h.y, 0, 9, 6); pop("KABOOM", h.x, h.y, 30, 1.5, "#ffb000"); shake = Math.max(shake, 14); noise(0.8, 600, 0.5); }
+      if (h.t > 5) helis.splice(i, 1);
+      continue;
+    }
+    h.ph += dt * 0.6;
+    const tx = mon.x + Math.cos(h.ph) * 150, ty = mon.y + Math.sin(h.ph) * 60;
+    const dx = tx - h.x, dy = ty - h.y, dd = Math.hypot(dx, dy), sp = Math.min(dd, 170 * dt);
+    if (dd > 1) { h.x += dx / dd * sp; h.y += dy / dd * sp; }
+    h.face = mon.x > h.x ? 1 : -1;
+    if (mode === "play" && Math.hypot(mon.x - h.x, mon.y - h.y) < 280) {
+      h.cool -= dt; if (h.cool <= 0) { h.cool = rnd(0.9, 1.5); h.flash = 0.07; shoot(h.x, h.y - h.z * 0.92, h.face); }
+    }
+  }
+  const mh = mon.hm * UP, mw = mh * 32 / 36;
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i]; b.t += dt; b.x += b.vx * dt; b.y += b.vy * dt;
+    if (mode === "play" && Math.abs(b.x - mon.x) < mw * 0.35 && b.y < mon.y && b.y > mon.y - mh * 0.95) {
+      bullets.splice(i, 1);
+      hurt(3);
+      bits(b.x, mon.y, mon.y - b.y, 2, 4, ["#c8323a", "#6cc23a"], 60);
+      continue;
+    }
+    if (b.t > 0.9) bullets.splice(i, 1);
+  }
+}
+function hurt(n) {
+  mon.hp = Math.max(0, mon.hp - n); mon.hurt = 0.3;
+  if (Math.random() < 0.25) pop(pick(["OW", "OI", "OUCH"]), mon.x, mon.y, mon.hm * UP, 0.9, "#ff5a3c");
+  if (mon.hp <= 0 && mode === "play") gameOver("shot");
+}
+
+// ---- update ----
+function update(dt) {
+  now += dt;
+  mon.cool -= dt; mon.punch = Math.max(0, mon.punch - dt); mon.chomp = Math.max(0, mon.chomp - dt);
+  mon.hurt = Math.max(0, mon.hurt - dt); mon.zap = Math.max(0, mon.zap - dt);
+  if (mode === "over") overT += dt;
+  const playing = mode === "play";
+  if (playing) {
+    clock -= dt;
+    if (clock <= 0) { clock = 0; gameOver("time"); }
+    fieldT -= dt; if (fieldT <= 0) { roadField(); fieldT = 0.4; }
+    spawnT -= dt;
+    if (spawnT <= 0 && cops.filter(c => !c.dead).length < 8) { spawnCop(); spawnT = Math.max(1.5, 4.5 - (ROUND - clock) * 0.06); }
+    if (clock <= HELI_AT) {
+      heliT -= dt;
+      if (heliT <= 0 && helis.filter(h => !h.dead).length < 3) { spawnHeli(); heliT = 7; if (helis.length === 1) feed("HELICOPTERS INBOUND", "warn"); }
+    }
+  }
+  let dx = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+  let dy = (keys.ArrowDown ? 1 : 0) - (keys.ArrowUp ? 1 : 0);
+  const reach = mon.hm * 0.9;
+  if (playing && (dx || dy)) {
+    const l = Math.hypot(dx, dy); dx /= l; dy /= l;
+    mon.dx = dx; mon.dy = dy;
+    if (dx) mon.face = dx > 0 ? 1 : -1;
+    const sp = 140 * dt;
+    mon.walk += dt * 8;
+    const nx = mon.x + dx * sp, ny = mon.y + dy * sp;
+    if (!inZone(nx + dx * 6, ny + dy * 6)) {
+      if (mon.zap <= 0) {
+        mon.zap = 0.7;
+        mon.x -= dx * 30; mon.y -= dy * 30;
+        hurt(5); shake = Math.max(shake, 8);
+        bits(nx, ny, mon.hm * UP * 0.4, 3, 20, SPARK, 200);
+        noise(0.35, 3000, 0.3, "highpass");
+        feed("WE SAID ZONE 1, YOU IDIOT MONSTER", "zap");
+      }
+    } else if (!hitAt(nx + dx * reach * 0.5, ny + dy * reach * 0.3) && !hitAt(nx, ny)) { mon.x = nx; mon.y = ny; }
+  }
+  if (playing && keys[" "] && mon.cool <= 0) {
+    mon.punch = 0.16; mon.cool = 0.24;
+    const px = mon.x + mon.dx * reach * 0.6, py = mon.y + mon.dy * reach * 0.4;
+    const heli = helis.find(h => !h.dead && h.z <= mon.hm * UP * 1.1 && Math.hypot(h.x - px, h.y - py) < reach * 1.3);
+    const cop = cops.find(c => !c.dead && Math.hypot(c.x - px, c.y - py) < reach * 0.9);
+    if (heli) downHeli(heli);
+    else if (cop) flipCop(cop);
+    else {
+      const b = nearestBuilding(px, py, reach * 0.7);
+      if (b) punch(b);
+    }
+  }
+  updateCops(dt);
+  cam.s = Math.min(3, (H * 0.22) / (mon.hm * UP));
+  cam.x += (mon.x - cam.x) * Math.min(1, dt * 5);
+  cam.y += (mon.y - mon.hm * UP * 0.4 - cam.y) * Math.min(1, dt * 5);
+  for (let i = falls.length - 1; i >= 0; i--) {
+    const f = falls[i]; f.t += dt;
+    const b = f.b;
+    if (f.t < f.dur) {
+      shake = Math.max(shake, 2 + f.big * 10);
+      if (Math.random() < dt * 40) dust(rnd(b.x0, b.x1), rnd(b.cy, b.y1), 0, rnd(4, 7), 2);
+    } else { b.holes = null; falls.splice(i, 1); for (let k = 0; k < 8; k++) dust(rnd(b.x0, b.x1), rnd(b.cy, b.y1), 0, rnd(5, 9), 1); }
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.t += dt;
+    if (p.t > p.life) { parts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.z += p.vz * dt; p.vz -= (p.dust ? 10 : 400) * dt; if (p.z < 0) { p.z = 0; p.vz = 0; p.vx *= 0.8; }
+  }
+  for (let i = pops.length - 1; i >= 0; i--) { pops[i].t += dt; if (pops[i].t > pops[i].life) pops.splice(i, 1); }
+  shake *= Math.pow(0.01, dt);
+  if (feedT > 0) { feedT -= dt; if (feedT <= 0) $("feed").textContent = ""; }
+}
+
+// ---- render ----
+let rubble = null;
+function rubblePattern() {
+  const c = document.createElement("canvas"); c.width = c.height = 16; const g = c.getContext("2d");
+  g.fillStyle = "#6e665c"; g.fillRect(0, 0, 16, 16);
+  const cols = ["#4f4842", "#8c8276", "#3d3833", "#9a6a52"];
+  for (let i = 0; i < 40; i++) { g.fillStyle = cols[i % 4]; g.fillRect((i * 37) % 16, (i * 23 + (i >> 2)) % 16, 2, 1 + (i % 2)); }
+  return cx.createPattern(c, "repeat");
+}
+// add a polygon to the current path, always wound the same way so the union fills solid
+function addPoly(xs, ys) {
+  let a = 0;
+  for (let i = 0, j = xs.length - 1; i < xs.length; j = i++) a += (xs[j] - xs[i]) * (ys[j] + ys[i]);
+  const n = xs.length, fwd = a >= 0;
+  cx.moveTo(xs[fwd ? 0 : n - 1], ys[fwd ? 0 : n - 1]);
+  for (let k = 1; k < n; k++) { const i = fwd ? k : n - 1 - k; cx.lineTo(xs[i], ys[i]); }
+  cx.closePath();
+}
+// the building's whole on-screen shape: walls, roof and footprint
+function silhouette(b, toX, toY, s) {
+  const p = b.pts, hz = b.h * UP * s, n = p.length / 2;
+  const gx = [], gy = [], ty = [];
+  for (let i = 0; i < n; i++) { gx.push(toX(p[i * 2])); gy.push(toY(p[i * 2 + 1])); ty.push(gy[i] - hz); }
+  cx.beginPath();
+  addPoly(gx, gy); addPoly(gx, ty);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    addPoly([gx[i], gx[j], gx[j], gx[i]], [gy[i], gy[j], ty[j], ty[i]]);
+  }
+}
+function footprint(b, toX, toY) {
+  const p = b.pts; cx.beginPath(); cx.moveTo(toX(p[0]), toY(p[1]));
+  for (let i = 2; i < p.length; i += 2) cx.lineTo(toX(p[i]), toY(p[i + 1]));
+  cx.closePath();
+}
+function render() {
+  const s = cam.s, sx = (Math.random() - 0.5) * shake, sy = (Math.random() - 0.5) * shake;
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cx.imageSmoothingEnabled = false;
+  cx.fillStyle = "#ccd6e3"; cx.fillRect(0, 0, W, H);
+  const ox = W / 2 - cam.x * s + sx, oy = H / 2 - cam.y * s + sy;
+  const toX = x => x * s + ox, toY = y => y * s + oy;
+  const vx0 = -ox / s, vy0 = -oy / s, vx1 = (W - ox) / s, vy1 = (H - oy) / s;
+
+  // tiles, with parent fallback while loading
+  const l = Math.min(TOP, TOP + Math.ceil(Math.log2(s * DPR) - 1e-9));
+  const c = Math.pow(2, l - TOP), span = TS / c;
+  for (let j = Math.max(0, Math.floor(vy0 / span)); j <= Math.floor(vy1 / span); j++)
+    for (let i = Math.max(0, Math.floor(vx0 / span)); i <= Math.floor(vx1 / span); i++) {
+      const dx = Math.floor(toX(i * span)), dy = Math.floor(toY(j * span));
+      let t = tile(l, i, j);
+      if (t) { cx.drawImage(t, dx, dy, Math.ceil(t.naturalWidth / c * s) + 1, Math.ceil(t.naturalHeight / c * s) + 1); continue; }
+      for (let up = 1; up <= 4 && l - up >= 0; up++) {
+        const pi = i >> up, pj = j >> up, f = 1 << up, sub = TS / f;
+        const p = tile(l - up, pi, pj); if (!p) continue;
+        const srcX = (i - pi * f) * sub, srcY = (j - pj * f) * sub;
+        const sw = Math.min(sub, p.naturalWidth - srcX), shh = Math.min(sub, p.naturalHeight - srcY);
+        if (sw > 0 && shh > 0) cx.drawImage(p, srcX, srcY, sw, shh, dx, dy, Math.ceil(sw * f / c * s) + 1, Math.ceil(shh * f / c * s) + 1);
+        break;
+      }
+    }
+  if (!ALL.length) return;
+
+  const eaten = [], damaged = [];
+  near(vx0, vy0, vx1, vy1 + 1100, b => { if (b.eaten) eaten.push(b); else if (b.holes) damaged.push(b); });
+
+  // punch holes in standing buildings, clipped to the building
+  for (const b of damaged) {
+    cx.save(); silhouette(b, toX, toY, s); cx.clip("nonzero");
+    for (const h of b.holes) {
+      const hx = toX(h.x), hy = toY(h.y) - h.z * s, r = h.r * s;
+      cx.fillStyle = "#4a3a32"; cx.fillRect(hx - r, hy - r * 0.8, r * 2, r * 1.6);
+      cx.fillStyle = "#1c1614"; cx.fillRect(hx - r * 0.75, hy - r * 0.5, r * 1.5, r * 1.2);
+      cx.fillRect(hx - r * 1.1, hy - r * 0.2, r * 0.4, r * 0.5); cx.fillRect(hx + r * 0.6, hy + r * 0.4, r * 0.5, r * 0.4);
+    }
+    cx.restore();
+  }
+
+  // grab the real art of anything that just started to fall, before we flatten it
+  for (const f of falls) {
+    if (f.snap !== null) continue;
+    const b = f.b, hz = b.h * UP;
+    let a0 = toX(b.x0), b0 = toY(b.y0 - hz), a1 = toX(b.x1), b1 = toY(b.y1);
+    a0 = Math.max(0, Math.floor(a0)); b0 = Math.max(0, Math.floor(b0)); a1 = Math.min(W, Math.ceil(a1)); b1 = Math.min(H, Math.ceil(b1));
+    if (a1 - a0 < 1 || b1 - b0 < 1) { f.snap = false; continue; }
+    const sn = document.createElement("canvas");
+    sn.width = Math.round((a1 - a0) * DPR); sn.height = Math.round((b1 - b0) * DPR);
+    sn.getContext("2d").drawImage(cv, a0 * DPR, b0 * DPR, sn.width, sn.height, 0, 0, sn.width, sn.height);
+    f.snap = sn; f.mx0 = (a0 - ox) / s; f.my0 = (b0 - oy) / s; f.mx1 = (a1 - ox) / s; f.my1 = (b1 - oy) / s;
+  }
+
+  // flatten everything eaten, rubble on the footprint
+  if (!rubble) rubble = rubblePattern();
+  eaten.sort((a, b) => a.cy - b.cy);
+  cx.fillStyle = "#5f656d";
+  for (const b of eaten) { silhouette(b, toX, toY, s); cx.fill("nonzero"); }
+  cx.fillStyle = rubble; cx.strokeStyle = "#2b2622"; cx.lineWidth = Math.max(1, s);
+  for (const b of eaten) { footprint(b, toX, toY); cx.fill(); cx.stroke(); }
+
+  // falling buildings: the real art slides down into the ground, wobbling
+  for (const f of falls) {
+    if (!f.snap) continue;
+    const b = f.b, p = Math.min(1, f.t / f.dur), ease = p * p;
+    const drop = ease * b.h * UP * s * 1.05, wob = Math.sin(f.t * 60) * (1 - p) * 3 * (0.4 + f.big);
+    cx.save(); silhouette(b, toX, toY, s); cx.clip("nonzero");
+    cx.drawImage(f.snap, toX(f.mx0) + wob, toY(f.my0) + drop, (f.mx1 - f.mx0) * s, (f.my1 - f.my0) * s);
+    cx.restore();
+  }
+
+  // the Zone 1 fence: a crackling line along the real TfL boundary
+  cx.save();
+  cx.beginPath(); cx.moveTo(toX(ZONE[0]), toY(ZONE[1]));
+  for (let i = 2; i < ZONE.length; i += 2) cx.lineTo(toX(ZONE[i]), toY(ZONE[i + 1]));
+  cx.closePath();
+  cx.strokeStyle = "rgba(125,249,255,0.28)"; cx.lineWidth = 10 * Math.max(0.6, s / 2); cx.stroke();
+  cx.strokeStyle = "#e9fdff"; cx.lineWidth = 2; cx.setLineDash([10, 6]); cx.lineDashOffset = -now * 60; cx.stroke();
+  cx.setLineDash([]);
+  cx.strokeStyle = "#7df9ff"; cx.lineWidth = 1.5;
+  for (let i = 0; i < ZONE.length; i += 2) {
+    const x = toX(ZONE[i]), y = toY(ZONE[i + 1]);
+    if (x < -20 || x > W + 20 || y < -20 || y > H + 20 || Math.random() > 0.15) continue;
+    cx.beginPath(); cx.moveTo(x, y);
+    for (let z = 1; z < 5; z++) cx.lineTo(x + rnd(-10, 10), y - z * rnd(4, 9));
+    cx.stroke();
+  }
+  cx.restore();
+
+  // cars and monster, back to front
+  const actors = cops.map(c => ({ y: c.y, c })); actors.push({ y: mon.y, m: true });
+  actors.sort((a, b) => a.y - b.y);
+  for (const a of actors) {
+    if (a.m) { drawMonster(toX, toY, s); continue; }
+    const c = a.c, cw = 20 * 1.3 * s, ch = 11 * 1.3 * s;
+    cx.save(); cx.translate(toX(c.x), toY(c.y) - c.z * s);
+    if (c.dead) cx.rotate(c.spin);
+    cx.scale(c.face, 1);
+    cx.globalAlpha = c.dead && c.t > 4 ? Math.max(0, (6 - c.t) / 2) : 1;
+    cx.drawImage(CAR, -cw / 2, -ch, cw, ch);
+    if (!c.dead) {
+      const blue = Math.floor(now * 8) % 2;
+      cx.fillStyle = blue ? "#3d7bff" : "#c8d8ff"; cx.fillRect(-cw * 0.15, -ch * 1.12, cw * 0.12, ch * 0.16);
+      cx.fillStyle = blue ? "#c8d8ff" : "#3d7bff"; cx.fillRect(cw * 0.02, -ch * 1.12, cw * 0.12, ch * 0.16);
+      if (c.flash > 0) { cx.fillStyle = "#fff1a8"; cx.fillRect(cw * 0.45, -ch * 0.75, cw * 0.25, ch * 0.3); }
+    }
+    cx.restore();
+  }
+  cx.globalAlpha = 1;
+
+  // helicopters: shadow on the ground, body in the air, spinning rotor
+  for (const h of helis) {
+    const gx = toX(h.x), gy = toY(h.y), hw = 26 * 1.4 * s, hh = 12 * 1.4 * s;
+    cx.fillStyle = "rgba(16,19,26,0.22)"; cx.beginPath(); cx.ellipse(gx, gy, hw * 0.4, hw * 0.12, 0, 0, Math.PI * 2); cx.fill();
+    cx.save(); cx.translate(gx, gy - h.z * s);
+    if (h.dead) cx.rotate(h.spin);
+    cx.scale(h.face, 1);
+    cx.globalAlpha = h.dead && h.t > 3 ? Math.max(0, (5 - h.t) / 2) : 1;
+    cx.drawImage(HELI, -hw / 2, -hh, hw, hh);
+    const blade = Math.abs(Math.sin(now * 40)) * hw * 0.55 + hw * 0.1;
+    cx.fillStyle = "#10131a"; cx.fillRect(hw * 0.12 - blade, -hh - s * 1.5, blade * 2, Math.max(1, s * 1.2));
+    if (h.flash > 0) { cx.fillStyle = "#fff1a8"; cx.fillRect(hw * 0.45, -hh * 0.35, hw * 0.15, hh * 0.25); }
+    cx.restore();
+  }
+  cx.globalAlpha = 1;
+
+  // bullets as tracers
+  cx.strokeStyle = "#fff1a8"; cx.lineWidth = Math.max(1.5, s * 0.8);
+  for (const b of bullets) {
+    cx.beginPath(); cx.moveTo(toX(b.x), toY(b.y)); cx.lineTo(toX(b.x - b.vx * 0.02), toY(b.y - b.vy * 0.02)); cx.stroke();
+  }
+
+  // dust, bricks, sparks
+  for (const p of parts) {
+    const a = 1 - p.t / p.life;
+    cx.globalAlpha = p.dust ? a * 0.75 : a;
+    cx.fillStyle = p.col;
+    const z = p.sz * (p.dust ? 1 + p.t * 0.8 : 1) * s;
+    cx.fillRect(toX(p.x) - z / 2, toY(p.y) - p.z * s - z / 2, z, z);
+  }
+  cx.globalAlpha = 1;
+
+  // comic pops
+  cx.textAlign = "center"; cx.textBaseline = "middle"; cx.lineJoin = "round";
+  for (const q of pops) {
+    const k = q.t / q.life, grow = k < 0.15 ? k / 0.15 : 1;
+    const size = Math.round(Math.max(16, Math.min(64, H * 0.035)) * q.size * (0.6 + 0.4 * grow));
+    cx.save(); cx.translate(toX(q.x), toY(q.y) - q.z * s - k * 30); cx.rotate(q.rot);
+    cx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+    cx.font = size + "px Silkscreen, monospace";
+    cx.lineWidth = size * 0.28; cx.strokeStyle = "#10131a"; cx.strokeText(q.text, 0, 0);
+    cx.fillStyle = q.col; cx.fillText(q.text, 0, 0);
+    cx.restore();
+  }
+  cx.globalAlpha = 1;
+
+  const tEl = $("hT"); tEl.textContent = clock.toFixed(1); tEl.classList.toggle("low", clock <= 5);
+  $("hD").textContent = money(damage);
+  const hEl = $("hH"); hEl.style.width = mon.hp + "%"; hEl.classList.toggle("low", mon.hp <= 30);
+}
+function drawMonster(toX, toY, s) {
+  const mh = mon.hm * UP * s, mw = mh * 32 / 36;
+  const fx = toX(mon.x), fy = toY(mon.y);
+  cx.fillStyle = "rgba(16,19,26,0.28)";
+  cx.beginPath(); cx.ellipse(fx, fy, mw * 0.42, mw * 0.14, 0, 0, Math.PI * 2); cx.fill();
+  if (mon.hurt > 0 && Math.floor(now * 30) % 2) return;     // hit blink
+  const moving = mode === "play" && (keys.ArrowLeft || keys.ArrowRight || keys.ArrowUp || keys.ArrowDown);
+  const fr = mon.punch > 0 ? 3 : mon.chomp > 0 ? 2 : (moving ? Math.floor(mon.walk) % 2 : 0);
+  const bob = moving && !mon.punch ? (Math.floor(mon.walk) % 2) * mh * 0.02 : 0;
+  const lunge = mon.punch > 0 ? mw * 0.08 : 0;
+  cx.save(); cx.translate(fx + lunge * mon.face, fy - bob);
+  if (mode === "over" && endWhy === "shot") cx.rotate(-mon.face * Math.min(Math.PI / 2, overT * 4)); // keels over
+  cx.scale(mon.face, 1);
+  cx.drawImage(SPR[fr], -mw / 2, -mh, mw, mh); cx.restore();
+}
+
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  if (ALL.length && !paused) update(dt);
+  render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+Promise.all([fetch("buildings.json").then(r => r.json()), fetch("roads.json").then(r => r.json())]).then(([d, rd]) => {
+  load(d); loadRoads(rd); reset(); $("feed").textContent = "";
+  $("nB").textContent = (Math.floor(ALL.length / 1000) * 1000).toLocaleString("en-GB");
+  mode = "title"; $("go").textContent = "PRESS SPACE";
+}).catch(() => { $("go").textContent = "COULD NOT LOAD BUILDINGS. RELOAD."; });
+</script>
+</body>
+</html>
