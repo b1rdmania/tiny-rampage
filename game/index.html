@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ccd6e3">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Tiny Rampage</title>
 <meta name="description" content="All of Zone 1 as a playable map you destroy. Built on tiny.london.">
 <meta property="og:type" content="website">
@@ -30,20 +32,32 @@
     --pixel: "Silkscreen", "Courier New", monospace;
   }
   [hidden] { display: none !important; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--haze); }
-  canvas { display: block; width: 100vw; height: 100vh; image-rendering: pixelated; }
+  html { background: #ccd6e3; overscroll-behavior-y: none; }
+  /* a game screen: nothing scrolls, bounces, selects or zooms */
+  body {
+    margin: 0; position: fixed; inset: 0; overflow: clip; background: var(--haze);
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; width: 100vw; height: 100dvh; image-rendering: pixelated; }
+  .touch { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touch { display: revert; }
+    .kb, .credit { display: none; }
+  }
   .hud {
-    position: fixed; top: 12px; left: 12px; display: flex; gap: 20px; align-items: flex-start;
+    position: fixed; inset-block-start: calc(12px + env(safe-area-inset-top, 0px)); inset-inline-start: calc(12px + env(safe-area-inset-left, 0px));
+    display: flex; gap: clamp(10px, 3vw, 20px); align-items: flex-start;
     padding: 8px 12px; background: var(--panel); color: var(--paper);
     font: 14px/1.2 var(--pixel); letter-spacing: 0.04em; font-variant-numeric: tabular-nums;
   }
-  .hud b { display: block; font-size: 22px; font-weight: 400; color: var(--lizard); }
+  .hud b { display: block; font-size: clamp(16px, 4.6vw, 22px); font-weight: 400; color: var(--lizard); }
   .hud b.low { color: var(--warn); }
-  .bar { width: 120px; height: 14px; margin-top: 6px; background: #3a1714; border: 2px solid var(--paper); }
+  .bar { width: clamp(70px, 22vw, 120px); height: 14px; margin-top: 6px; background: #3a1714; border: 2px solid var(--paper); }
   .bar i { display: block; height: 100%; background: var(--lizard); }
   .bar i.low { background: var(--warn); }
   .feed {
-    position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+    position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%);
     color: var(--paper); font: 18px var(--pixel); text-align: center;
     text-shadow: 2px 2px 0 var(--ink), -1px -1px 0 var(--ink); pointer-events: none;
     width: calc(100vw - 32px);
@@ -54,8 +68,8 @@
     position: fixed; inset: 0; display: grid; place-items: center;
     background: rgba(16, 19, 26, 0.55); color: var(--paper); font-family: var(--pixel); text-align: center;
   }
-  .card { background: var(--ink); padding: 28px 36px; max-width: 30rem; border: 4px solid var(--lizard); }
-  .card h1 { margin: 0 0 14px; font-size: 44px; font-weight: 400; color: var(--lizard); line-height: 1; }
+  .card { background: var(--ink); padding: clamp(18px, 5vw, 28px) clamp(18px, 6vw, 36px); max-width: min(30rem, calc(100vw - 32px)); box-sizing: border-box; border: 4px solid var(--lizard); }
+  .card h1 { margin: 0 0 14px; font-size: clamp(28px, 9vw, 44px); font-weight: 400; color: var(--lizard); line-height: 1; }
   .card h1.bad { color: var(--warn); }
   .card p { margin: 8px 0; font-size: 15px; line-height: 1.5; }
   .card .big { font-size: 30px; color: var(--paper); }
@@ -63,10 +77,16 @@
   @keyframes blink { 50% { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .card .go { animation: none; } }
   .info-btn {
-    position: fixed; top: 12px; right: 12px; padding: 8px 12px; border: 0; cursor: pointer;
+    position: fixed; inset-block-start: calc(12px + env(safe-area-inset-top, 0px)); inset-inline-end: calc(12px + env(safe-area-inset-right, 0px));
+    min-block-size: 44px; padding: 8px 12px; border: 0; cursor: pointer;
     background: var(--panel); color: var(--paper); font: 14px var(--pixel); letter-spacing: 0.04em;
   }
-  .info-btn:hover, .info-btn:focus-visible { color: var(--lizard); outline: 2px solid var(--lizard); }
+  .info-btn:focus-visible { color: var(--lizard); outline: 2px solid var(--lizard); }
+  .info-btn:active, .info .close:active { transform: scale(0.96); }
+  @media (hover: hover) and (pointer: fine) {
+    .info-btn:hover { color: var(--lizard); }
+    .info .close:hover { color: var(--warn); }
+  }
   .info { z-index: 5; }
   .info .card { text-align: left; max-width: 34rem; max-height: calc(100vh - 48px); overflow-y: auto; }
   .info h1 { font-size: 30px; }
@@ -74,8 +94,23 @@
   .info p { font-size: 13px; }
   .info a { color: var(--fence); }
   .info .links { display: flex; gap: 16px; margin-top: 18px; font-size: 15px; }
-  .info .close { float: right; margin: -8px -12px 0 0; background: none; border: 0; color: var(--paper); font: 14px var(--pixel); cursor: pointer; }
-  .info .close:hover, .info .close:focus-visible { color: var(--warn); }
+  .info .close { float: right; min-block-size: 44px; margin: -8px -12px 0 0; background: none; border: 0; color: var(--paper); font: 14px var(--pixel); cursor: pointer; }
+  .info .close:focus-visible { color: var(--warn); outline: 2px solid var(--warn); }
+  /* touch controls: thumb stick on the left, punch on the right */
+  .pad {
+    position: fixed; inset-block-end: calc(24px + env(safe-area-inset-bottom, 0px));
+    border: 4px solid var(--paper); background: rgba(16, 19, 26, 0.45); touch-action: none;
+  }
+  .stick { inset-inline-start: calc(20px + env(safe-area-inset-left, 0px)); inline-size: 132px; block-size: 132px; border-radius: 50%; }
+  .stick i { position: absolute; inset: 37px; border-radius: 50%; background: var(--paper); }
+  .punch {
+    inset-inline-end: calc(20px + env(safe-area-inset-right, 0px)); inline-size: 104px; block-size: 104px; border-radius: 50%;
+    color: var(--paper); font: 16px var(--pixel); background: rgba(200, 50, 58, 0.75);
+  }
+  .punch.on, .punch:active { background: var(--warn); transform: scale(0.96); }
+  @media (hover: none) and (pointer: coarse) {
+    .feed { bottom: calc(176px + env(safe-area-inset-bottom, 0px)); font-size: 15px; }
+  }
   .credit {
     position: fixed; right: 8px; bottom: 6px; font: 10px var(--pixel); color: var(--ink); opacity: 0.7;
   }
@@ -91,6 +126,8 @@
 </div>
 <button class="info-btn" id="infoBtn" type="button">INFO</button>
 <div class="feed" id="feed"></div>
+<div class="pad stick touch" id="stick"><i id="knob"></i></div>
+<button class="pad punch touch" id="punchBtn" type="button">PUNCH</button>
 <div class="overlay info" id="info" hidden>
   <div class="card">
     <button class="close" id="infoClose" type="button">CLOSE</button>
@@ -101,6 +138,7 @@
     <p>The map is <a href="https://tiny.london/" target="_blank" rel="noopener">tiny.london</a>: all of Greater London as one isometric pixel-art map. The game loads its tiles live.</p>
     <p>The buildings are <span id="nB">20,000</span> OpenStreetMap outlines with heights. tiny.london publishes its camera maths, so each outline sits on its building in the art to the pixel.</p>
     <p>When a building falls, the game cuts that building's real pixels off the screen and sinks them into the ground.</p>
+    <p>Buildings and roads © OpenStreetMap contributors. Zones: TfL Open Data.</p>
     <p>Police cars drive the real road network. Helicopters go where they like.</p>
     <p>The electric fence is the real TfL Zone 1 boundary. Damage is floor area at £4,000 a square metre.</p>
     <p>One HTML file, a canvas, no libraries. Hosted on Cloudflare. Built with Claude Code in an afternoon.</p>
@@ -114,7 +152,8 @@
   <div class="card" id="card">
     <h1>TINY RAMPAGE</h1>
     <p>60 seconds. Zone 1.</p>
-    <p>Arrow keys to stomp. Space to punch.</p>
+    <p class="kb">Arrow keys to stomp. Space to punch.</p>
+    <p class="touch">Stick to stomp. Big red button to punch.</p>
     <p>Don't get shot.</p>
     <p class="go" id="go">LOADING LONDON&hellip;</p>
   </div>
@@ -350,7 +389,7 @@ function saveBest(v) { try { localStorage.setItem("tr-best", String(v)); } catch
 
 function start() {
   reset(); mode = "play"; $("ov").hidden = true;
-  if (!ac) audio();
+  audio();
 }
 function gameOver(why) {
   mode = "over"; endWhy = why; overT = 0;
@@ -361,7 +400,7 @@ function gameOver(why) {
     '<p class="big">' + money(damage) + " of damage</p>" +
     "<p>" + wrecked + " buildings · " + flipped + " police cars" + (downed ? " · " + downed + " helicopters" : "") + "</p>" +
     "<p>" + (isBest ? "NEW BEST" : "Best " + money(prev)) + "</p>" +
-    '<p class="go">Space to go again</p>';
+    '<p class="go"><span class="kb">Space</span><span class="touch">Tap</span> to go again</p>';
   setTimeout(() => { if (mode === "over") $("ov").hidden = false; }, why === "shot" ? 1200 : 400);
 }
 
@@ -387,9 +426,34 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => { keys[e.key] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 
+// ---- touch: stick and punch button set the same keys as the keyboard ----
+(() => {
+  const stick = $("stick"), knob = $("knob"), btn = $("punchBtn");
+  let sid = null;
+  const setDir = (dx, dy) => {
+    const d = Math.hypot(dx, dy), max = 46, k = d > max ? max / d : 1;
+    knob.style.translate = dx * k + "px " + dy * k + "px";
+    const dead = 14, a = Math.atan2(dy, dx);
+    keys.ArrowRight = d > dead && Math.cos(a) > 0.38; keys.ArrowLeft = d > dead && Math.cos(a) < -0.38;
+    keys.ArrowDown = d > dead && Math.sin(a) > 0.38; keys.ArrowUp = d > dead && Math.sin(a) < -0.38;
+  };
+  const centre = e => { const r = stick.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+  stick.addEventListener("pointerdown", e => { sid = e.pointerId; try { stick.setPointerCapture(sid); } catch (err) {} setDir(...centre(e)); });
+  stick.addEventListener("pointermove", e => { if (e.pointerId === sid) setDir(...centre(e)); });
+  const release = e => { if (e.pointerId === sid) { sid = null; setDir(0, 0); } };
+  stick.addEventListener("pointerup", release); stick.addEventListener("pointercancel", release);
+  btn.addEventListener("pointerdown", e => { try { btn.setPointerCapture(e.pointerId); } catch (err) {} keys[" "] = true; btn.classList.add("on"); audio(); });
+  const up = () => { keys[" "] = false; btn.classList.remove("on"); };
+  btn.addEventListener("pointerup", up); btn.addEventListener("pointercancel", up);
+  // a tap on the title or end card starts a round; pointerup counts as a gesture for iOS audio
+  $("ov").addEventListener("pointerup", () => { if (mode === "title" || (mode === "over" && overT > 1)) start(); });
+})();
+
 // ---- sound ----
 let ac = null;
-function audio() { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ac = null; } }
+function audio() {
+  try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === "suspended") ac.resume(); } catch (e) { ac = null; }
+}
 function noise(len, freq, vol, type) {
   if (!ac) return;
   const n = Math.floor(ac.sampleRate * len), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
@@ -603,7 +667,7 @@ function update(dt) {
     }
   }
   updateCops(dt);
-  cam.s = Math.min(3, (H * 0.22) / (mon.hm * UP));
+  cam.s = Math.min(3, Math.min(H * 0.22, W * 0.26) / (mon.hm * UP));
   cam.x += (mon.x - cam.x) * Math.min(1, dt * 5);
   cam.y += (mon.y - mon.hm * UP * 0.4 - cam.y) * Math.min(1, dt * 5);
   for (let i = falls.length - 1; i >= 0; i--) {
@@ -850,7 +914,7 @@ requestAnimationFrame(frame);
 Promise.all([fetch("buildings.json").then(r => r.json()), fetch("roads.json").then(r => r.json())]).then(([d, rd]) => {
   load(d); loadRoads(rd); reset(); $("feed").textContent = "";
   $("nB").textContent = (Math.floor(ALL.length / 1000) * 1000).toLocaleString("en-GB");
-  mode = "title"; $("go").textContent = "PRESS SPACE";
+  mode = "title"; $("go").innerHTML = '<span class="kb">PRESS SPACE</span><span class="touch">TAP TO START</span>';
 }).catch(() => { $("go").textContent = "COULD NOT LOAD BUILDINGS. RELOAD."; });
 </script>
 </body>
