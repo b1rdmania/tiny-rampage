@@ -374,7 +374,7 @@ let mode = "loading", clock = ROUND, damage = 0, wrecked = 0, flipped = 0, downe
 let shake = 0, feedT = 0, now = 0;
 
 function reset() {
-  for (const b of ALL) { b.eaten = false; b.hp = 0; b.holes = null; }
+  for (const b of ALL) { b.eaten = false; b.hp = 0; b.holes = null; b.stub = null; b.ruin = null; }
   parts.length = pops.length = falls.length = cops.length = bullets.length = helis.length = 0;
   const [where, sx, sy] = pick(STARTS);
   let x = sx, y = sy;
@@ -502,8 +502,33 @@ function punch(b) {
   noise(0.09, 500, 0.35);
   if (b.hp <= 0) collapse(b);
 }
+// what is left standing: a jagged ring of wall a few floors high
+function stubFor(b) {
+  const hs = Math.max(5, Math.min(16, b.h * 0.3)), p = b.pts, n = p.length / 2, pts = [], z = [], debris = [], cracks = [];
+  let w = rnd(0.6, 1);
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n, ax = p[i * 2], ay = p[i * 2 + 1], bx = p[j * 2], by = p[j * 2 + 1];
+    const k = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) / 7));
+    for (let m = 0; m < k; m++) {
+      pts.push(ax + (bx - ax) * m / k, ay + (by - ay) * m / k);
+      w = Math.max(0.35, Math.min(1.15, w + rnd(-0.25, 0.25)));
+      z.push(Math.min(b.h, hs * (Math.random() < 0.12 ? rnd(0.1, 0.3) : w)));
+    }
+  }
+  for (let i = 0; i < pts.length; i += 2) {
+    if (pts[i + 1] < b.cy || Math.random() < 0.4) continue;
+    const dx = pts[i] - b.cx, dy = pts[i + 1] - b.cy, d = Math.hypot(dx, dy) || 1, o = rnd(1, 6);
+    debris.push(pts[i] + dx / d * o, pts[i + 1] + dy / d * o, rnd(1.2, 3.5), Math.floor(rnd(0, BRICK.length)));
+  }
+  for (let i = 0, k = 3 + Math.round(Math.sqrt(b.a) / 15); i < k; i++) {
+    const x = rnd(b.x0, b.x1), y = rnd(b.y0, b.y1), a = rnd(0, 6.3), l = rnd(4, 14);
+    cracks.push(x, y, x + Math.cos(a) * l, y + Math.sin(a) * l * 0.6);
+  }
+  return { p: pts, z, debris, cracks, sink: (b.h - hs * 0.4) * UP };
+}
 function collapse(b) {
   b.eaten = true; wrecked++; damage += b.value;
+  b.stub = stubFor(b);
   const big = Math.min(1, Math.sqrt(b.a * b.h) / 3000);
   falls.push({ b, t: 0, dur: 0.55 + Math.min(1, b.h / 180), snap: null, big });
   noise(0.4 + big * 0.8, 900 - big * 600, 0.3 + big * 0.25);
@@ -676,7 +701,10 @@ function update(dt) {
     if (f.t < f.dur) {
       shake = Math.max(shake, 2 + f.big * 10);
       if (Math.random() < dt * 40) dust(rnd(b.x0, b.x1), rnd(b.cy, b.y1), 0, rnd(4, 7), 2);
-    } else { b.holes = null; falls.splice(i, 1); for (let k = 0; k < 8; k++) dust(rnd(b.x0, b.x1), rnd(b.cy, b.y1), 0, rnd(5, 9), 1); }
+    } else {
+      b.holes = null; falls.splice(i, 1);
+      if (b.ruin) b.ruin = cropRuin(b); for (let k = 0; k < 8; k++) dust(rnd(b.x0, b.x1), rnd(b.cy, b.y1), 0, rnd(5, 9), 1);
+    }
   }
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i]; p.t += dt;
@@ -692,8 +720,8 @@ function update(dt) {
 let rubble = null;
 function rubblePattern() {
   const c = document.createElement("canvas"); c.width = c.height = 16; const g = c.getContext("2d");
-  g.fillStyle = "#6e665c"; g.fillRect(0, 0, 16, 16);
-  const cols = ["#4f4842", "#8c8276", "#3d3833", "#9a6a52"];
+  g.fillStyle = "#6b6863"; g.fillRect(0, 0, 16, 16);
+  const cols = ["#4a4744", "#8f8a82", "#3a3836", "#8a5a44"];
   for (let i = 0; i < 40; i++) { g.fillStyle = cols[i % 4]; g.fillRect((i * 37) % 16, (i * 23 + (i >> 2)) % 16, 2, 1 + (i % 2)); }
   return cx.createPattern(c, "repeat");
 }
@@ -706,11 +734,27 @@ function addPoly(xs, ys) {
   for (let k = 1; k < n; k++) { const i = fwd ? k : n - 1 - k; cx.lineTo(xs[i], ys[i]); }
   cx.closePath();
 }
+// keep only the parts of the snapshot the ruin shows: the bottom floors and the roof
+function cropRuin(b) {
+  const r = b.ruin, hz = b.h * UP;
+  return { ...cropRows(r, b.y0 - Math.max(...b.stub.z) * UP - 2, r.my1), roof: cropRows(r, b.y0 - hz, b.y1 - hz) };
+}
+function cropRows(r, top, bot) {
+  const H0 = r.c.height, k = H0 / (r.my1 - r.my0);
+  const y = Math.max(0, Math.floor((top - r.my0) * k)), y1 = Math.min(H0, Math.ceil((bot - r.my0) * k));
+  if (y1 - y < 1) return { c: null };
+  const c = document.createElement("canvas"); c.width = r.c.width; c.height = y1 - y;
+  c.getContext("2d").drawImage(r.c, 0, y, c.width, c.height, 0, 0, c.width, c.height);
+  return { c, mx0: r.mx0, my0: r.my0 + y / k, mx1: r.mx1, my1: r.my0 + y1 / k };
+}
+function drawCrop(r, toX, toY, s, dy) { if (r && r.c) cx.drawImage(r.c, toX(r.mx0), toY(r.my0) + dy, (r.mx1 - r.mx0) * s, (r.my1 - r.my0) * s); }
 // the building's whole on-screen shape: walls, roof and footprint
-function silhouette(b, toX, toY, s) {
-  const p = b.pts, hz = b.h * UP * s, n = p.length / 2;
+function silhouette(b, toX, toY, s) { prism(b.pts, null, b.h * UP * s, toX, toY); }
+// a footprint extruded to a screen height per point (zs) or one height for all (hz)
+function prism(p, zs, hz, toX, toY) {
+  const n = p.length / 2;
   const gx = [], gy = [], ty = [];
-  for (let i = 0; i < n; i++) { gx.push(toX(p[i * 2])); gy.push(toY(p[i * 2 + 1])); ty.push(gy[i] - hz); }
+  for (let i = 0; i < n; i++) { gx.push(toX(p[i * 2])); gy.push(toY(p[i * 2 + 1])); ty.push(gy[i] - (zs ? zs[i] : hz)); }
   cx.beginPath();
   addPoly(gx, gy); addPoly(gx, ty);
   for (let i = 0; i < n; i++) {
@@ -777,6 +821,7 @@ function render() {
     sn.width = Math.round((a1 - a0) * DPR); sn.height = Math.round((b1 - b0) * DPR);
     sn.getContext("2d").drawImage(cv, a0 * DPR, b0 * DPR, sn.width, sn.height, 0, 0, sn.width, sn.height);
     f.snap = sn; f.mx0 = (a0 - ox) / s; f.my0 = (b0 - oy) / s; f.mx1 = (a1 - ox) / s; f.my1 = (b1 - oy) / s;
+    b.ruin = { c: sn, mx0: f.mx0, my0: f.my0, mx1: f.mx1, my1: f.my1 };
   }
 
   // flatten everything eaten, rubble on the footprint
@@ -795,6 +840,38 @@ function render() {
     cx.save(); silhouette(b, toX, toY, s); cx.clip("nonzero");
     cx.drawImage(f.snap, toX(f.mx0) + wob, toY(f.my0) + drop, (f.mx1 - f.mx0) * s, (f.my1 - f.my0) * s);
     cx.restore();
+  }
+
+  // stubs: the bottom floors still standing, in their own art, broken floor on top
+  for (const b of eaten) {
+    const st = b.stub; if (!st) continue;
+    const zs = st.z.map(z => z * UP * s), r = b.ruin;
+    cx.save(); prism(st.p, zs, 0, toX, toY);
+    if (r && r.c) { cx.clip("nonzero"); drawCrop(r, toX, toY, s, 0); cx.fillStyle = "rgba(40,30,24,0.28)"; cx.fillRect(0, 0, W, H); }
+    else { cx.fillStyle = "#7a7068"; cx.fill("nonzero"); }
+    cx.restore();
+    // the open top: the roof fallen in, dark and cracked, ringed by the broken wall tops
+    const top = () => {
+      cx.beginPath();
+      for (let i = 0; i < zs.length; i++) cx[i ? "lineTo" : "moveTo"](toX(st.p[i * 2]), toY(st.p[i * 2 + 1]) - zs[i]);
+      cx.closePath();
+    };
+    cx.save(); top(); cx.fillStyle = rubble; cx.fill(); cx.clip();
+    if (r) drawCrop(r.roof, toX, toY, s, st.sink * s);
+    cx.globalAlpha = 0.35; cx.fillStyle = rubble; cx.fillRect(0, 0, W, H); cx.globalAlpha = 1;
+    cx.fillStyle = "rgba(20,16,14,0.45)"; cx.fillRect(0, 0, W, H);
+    const k = st.cracks; cx.beginPath();
+    for (let i = 0; i < k.length; i += 4) { cx.moveTo(toX(k[i]), toY(k[i + 1])); cx.lineTo(toX(k[i + 2]), toY(k[i + 3])); }
+    cx.strokeStyle = "#141110"; cx.lineWidth = Math.max(1, s); cx.stroke();
+    cx.restore();
+    top(); cx.lineJoin = "round";
+    cx.strokeStyle = "#241e1a"; cx.lineWidth = Math.max(2, s * 2.2); cx.stroke();
+    cx.strokeStyle = "#9d958a"; cx.lineWidth = Math.max(1, s * 0.9); cx.stroke();
+    const d = st.debris;
+    for (let i = 0; i < d.length; i += 4) {
+      const w = d[i + 2] * s; cx.fillStyle = BRICK[d[i + 3]];
+      cx.fillRect(toX(d[i]) - w / 2, toY(d[i + 1]) - w * 0.7, w, w * 0.7);
+    }
   }
 
   // the Zone 1 fence: a crackling line along the real TfL boundary
